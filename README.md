@@ -40,3 +40,51 @@ After `prep_metu.py`, check `cache_dir/meta.json`: `n_name_mismatch` should be 0
 | `common.py` | Backbones, geometry, masking, model parts, metrics |
 
 Tested end to end on a small synthetic dataset with random small backbones on CPU (geometry checked: warped RGB vs. thermal pixel correlation 0.99). It has not yet run on the real data and weights, so expect small fixes on the first run.
+
+---
+
+## Phase 2: place a thermal frame on OpenStreetMap
+
+A frame plus its height, heading and lens data is matched against an OpenStreetMap raster (roads, buildings, water) within ±128 m and ±10° of a prior. Output: position, heading, and a confidence, or "unsure". Design in [PLAN.md §8](PLAN.md#8-phase-2-thermal-frame--openstreetmap).
+
+### Data
+- **Thermal-UAV** ([Hugging Face `FloralHercules/Thermal-UAV`](https://huggingface.co/datasets/FloralHercules/Thermal-UAV), or the Baidu link in the SCC-Loc README). Unpack so that `tuav_root/Data/Thermal-UAV/{train,valid,test}/changsha/<scene>/Thermal/*.JPG` and `tuav_root/Data/Reference_map/changsha/{ref.tif,dsm.tif}` exist. If `tuav_root/Data/metadata/*_Thermal.json` is missing, `p2_prep.py` reads the per-scene `Thermal_info.csv` files instead.
+- **OpenStreetMap** for the reference-map box: `p2_prep.py` prints the box and two ways to get it (Overpass `curl`, or `osmium extract` from the Geofabrik China file). Put the `.osm` path in `osm_files`.
+- Optional, if OSM buildings are thin there: Overture buildings for the same box (`pip install overturemaps`, then `overturemaps download --bbox=W,S,E,N -f geoparquet --type=building -o buildings.parquet`) → `overture_buildings`; or `dsm_buildings: true` (coarse, from the 5.3 m DSM).
+- Check the Thermal-UAV license before publishing results.
+
+### Setup
+```bash
+pip install -r requirements.txt     # adds rasterio, pyproj, shapely (pyarrow only for Overture)
+```
+Edit `configs/p2_base.yaml`: `tuav_root`, `p2_cache`, `osm_files`, and `backbone` + `p1_ckpt` (the best Phase 1 run with that backbone; `results/r4_dino_native.pt` by default).
+
+### Run
+```bash
+bash run_phase2.sh       # prep → OSM raster → images + features → checks → m1, m2, m3, a1 → table
+RUNS="p2_a2_jepa" bash run_phase2.sh   # other runs (steps already done are skipped by the caches)
+```
+Read the `p2_check.py` lines before trusting any run: the geometry check must pick `gt` (if not, it says whether to flip `yaw_sign`, set `yaw_offset: 180` or look at heights), and the matcher check on OSM-rendered queries must be about one cell (2 m) or better.
+
+### Outputs
+| Path | What |
+|---|---|
+| `results/p2_check.json` | Geometry check, matcher check, OSM content per footprint, error of the prior alone |
+| `results/p2_<run>.json` | Test metrics per query (thermal, satellite crop), day / night, validation; `p2_<run>_frames.json` per frame; `.pt` weights |
+| `results/p2_table.md` | Checks and all runs in one table |
+| `results/p2_figs/` | `osm_preview.png`; `check_*`: frame, satellite at the metadata pose, OSM in the camera frame, overlay; run figures: frame, map window with probability, prior (+), truth (o), prediction (x), footprint |
+
+### Files
+| File | Role |
+|---|---|
+| `p2_prep.py` | Metadata → map coordinates, ground resolution, heading, fixed evaluation priors; writes the Overpass query |
+| `p2_osm.py` | OSM (and optional Overture / DSM buildings) → 5-channel raster at 1 m |
+| `p2_cache.py` | Images and frozen features: thermal frames, satellite crops at each frame's footprint, drone RGB (optional) |
+| `p2_check.py` | Geometry and matcher checks, map content, prior-only error |
+| `p2_train.py` | Adapter (from Phase 1) + BEV head + map encoder + FFT matcher; pose NLL + layout + NCE (+ JEPA) |
+| `p2_report.py` | `results/p2_table.md` |
+| `p2_common.py` | Footprint geometry, map windows, templates, matching, heads, metrics, figures |
+
+Disk: with DINOv3 ViT-L at 640×512, features are about 31 GB per query kind (thermal + satellite ≈ 62 GB) and images about 12 GB per kind.
+
+Tested end to end on synthetic Thermal-UAV-style data (CPU, random small backbones, metadata as JSON and as CSV): the geometry check picks the true pose (edge correlation 0.80, wrong settings ≤ 0.14), the matcher finds OSM-rendered queries to 0.7 m median, and all six runs train and report. Not yet run on the real data.

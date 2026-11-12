@@ -1,0 +1,68 @@
+# Phase 2: load after base.yaml, e.g. --cfg configs/base.yaml configs/p2_base.yaml configs/p2_m1_thermal.yaml
+
+# data
+tuav_root: /path/to/thermal_uav        # the folder that contains Data/ (Data/Thermal-UAV, Data/Reference_map, Data/metadata)
+ref_tif: Data/Reference_map/changsha/ref.tif
+dsm_tif: Data/Reference_map/changsha/dsm.tif
+p2_cache: /path/to/structgeo_cache/p2
+p2_modalities: [thermal]               # add visible if the Visible frames are downloaded too
+cams:                                  # sensor constants, used only when metadata comes from the per-scene CSV files
+  thermal: {cam_size: 9.83, focal_len: 12.0, width: 1280, height: 1024}
+  visible: {cam_size: 12.11, focal_len: 6.73, width: 4032, height: 3024}
+visible_size: [640, 480]               # thermal frames use thermal_size from base.yaml (640 x 512)
+max_tilt: 10                           # keep frames within 10 deg of straight down
+height_win: 31                         # rolling median of the laser range along each flight (0 = raw)
+yaw_sign: 1                            # p2_check.py tells you if these two need changing
+yaw_offset: 0
+
+# map
+osm_files: [/path/to/changsha.osm]     # see the commands printed by p2_prep.py
+overture_buildings: null               # optional GeoParquet of Overture buildings for the same box
+dsm_buildings: false                   # optional: add buildings from the DSM (5.3 m, coarse) if OSM buildings are thin
+dsm_ground_win_m: 61
+dsm_min_height: 4
+osm_res: 1.0
+osm_margin_m: 400
+edge_m: 2
+
+# what to cache and which Phase 1 weights to start from
+p2_kinds: [thermal, sat]
+backbone: dino_web
+p1_ckpt: results/r4_dino_native.pt     # use the best Phase 1 run with the same backbone; null = random adapter
+
+# matcher
+cell_m: 2.0                            # 2 x osm_res
+tmpl_m: 256                            # template side; must hold the footprint diagonal (~245 m at 300 m height)
+tmpl_m_visible: 544                    # visible footprint is larger (84 deg lens)
+search_m: 128                          # +-128 m around the prior
+prior_m: 100                           # position prior error: uniform in +-100 m (train: fresh, eval: fixed per frame)
+yaw_noise: 5                           # heading prior error: uniform in +-5 deg
+yaw_range: 10                          # search +-10 deg around the prior ...
+yaw_step: 2                            # ... in 2 deg steps
+scale_jitter: 0.05                     # training only: +-5% ground-resolution error
+conf_radius_m: 10                      # confidence = probability mass within 10 m of the peak
+ok_m: 25                               # "correct" for coverage / precision / AUROC
+target_precision: 0.95                 # tau is set on validation for this precision
+min_content: 0.05                      # p2_check: footprints with < 5% mapped cells count as map-limited
+
+# model
+map_width: 32
+bev_width: 128
+match_dim: 32
+lay_up: 2
+init_scale: 10
+
+# training
+train_queries: [thermal]
+test_queries: [thermal, sat]
+w_pose: 1.0
+w_layout: 1.0
+w_nce: 0.5
+w_jepa: 0.0
+w_var: 0.1
+p2_lr: 3.0e-4
+adapter_lr: 1.0e-4
+p2_batch: 16
+p2_epochs: 30
+n_check: 200
+p2_fig: 6

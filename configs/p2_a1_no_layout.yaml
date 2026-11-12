@@ -1,0 +1,3 @@
+# Ablation: m1 without the layout loss
+name: p2_a1_no_layout
+w_layout: 0

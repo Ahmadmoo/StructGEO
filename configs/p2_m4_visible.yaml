@@ -1,0 +1,5 @@
+# Optional: drone RGB frames (needs visible in p2_modalities and p2_kinds). Compare day vs night with m1.
+name: p2_m4_visible
+train_queries: [visible]
+test_queries: [visible]
+w_nce: 0

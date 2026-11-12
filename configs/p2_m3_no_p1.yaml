@@ -1,0 +1,4 @@
+# Ablation: same as m1 but the adapter starts from random weights (no Phase 1)
+name: p2_m3_no_p1
+p1_ckpt: null
+adapter_lr: 3.0e-4

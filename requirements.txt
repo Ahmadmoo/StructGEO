@@ -5,3 +5,7 @@ opencv-python
 pillow
 pyyaml
 scikit-image
+# Phase 2
+rasterio
+pyproj
+shapely

@@ -1,0 +1,4 @@
+# Main: train and test on thermal frames; adapter starts from Phase 1 and is fine-tuned with NCE to satellite views
+name: p2_m1_thermal
+train_queries: [thermal]
+test_queries: [thermal, sat]

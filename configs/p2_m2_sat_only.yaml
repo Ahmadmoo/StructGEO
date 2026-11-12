@@ -1,0 +1,8 @@
+# Key test: the matcher never sees a thermal frame. Train on satellite views only, adapter frozen from Phase 1,
+# then test on thermal frames.
+name: p2_m2_sat_only
+train_queries: [sat]
+test_queries: [thermal, sat]
+adapter_lr: 0
+w_nce: 0
+w_jepa: 0

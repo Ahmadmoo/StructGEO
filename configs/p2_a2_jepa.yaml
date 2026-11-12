@@ -1,0 +1,3 @@
+# Ablation: m1 plus the masked cross-sensor JEPA term (thermal <-> satellite view), as in Phase 1. Needs the backbone online.
+name: p2_a2_jepa
+w_jepa: 1.0
