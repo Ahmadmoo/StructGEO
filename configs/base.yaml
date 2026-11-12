@@ -1,0 +1,51 @@
+metu_root: /path/to/METU-VisTIR
+cache_dir: /path/to/structgeo_cache
+out_dir: results
+device: cuda
+workers: 8
+seed: 0
+
+ijepa_repo: third_party/ijepa
+ijepa_ckpt: weights/IN1K-vit.h.16-448px-300e.pth.tar
+ijepa_arch: vit_huge
+ijepa_img: 448
+dinov3_repo: third_party/dinov3
+dino_arch: dinov3_vitl16
+dino_web: /path/to/dinov3_vitl16_pretrain_lvd1689m.pth
+dino_sat: /path/to/dinov3_vitl16_pretrain_sat493m.pth
+
+exclude_conds: [indoor]
+test_scenes: [scene_6, scene_7]
+thermal_size: [640, 512]
+rgb_native_size: [992, 560]
+patch: 16
+layers: 1
+cache_batch: 32
+
+zs_backbones: [ijepa, dino_web, dino_sat]
+zs_options: [same, native]
+n_fig: 4
+
+adapter_hidden: 512
+dim: 256
+pred_width: 384
+pred_depth: 4
+pred_heads: 6
+
+n_blocks: 4
+block_scale: [0.10, 0.20]
+block_aspect: [0.75, 1.5]
+margin_px: 16
+
+nce_anchors: 64
+nce_tau: 0.07
+w_jepa: 1.0
+w_nce: 1.0
+w_var: 0.1
+
+lr: 1.0e-3
+wd: 0.05
+warmup: 0.05
+batch: 64
+epochs: 100
+ema: [0.996, 1.0]

@@ -1,0 +1,8 @@
+__pycache__/
+results/
+weights/
+third_party/
+*.npy
+*.pt
+*.pth
+*.tar
