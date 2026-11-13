@@ -48,6 +48,8 @@ for job in "$@"; do
     CK="$R/$M1.pt $R/$M2.pt"
     [ -f $R/p2_a2_jepa.pt ] && CK="$CK $R/p2_a2_jepa.pt"
     python p2_partial.py --cfg $B --ckpts $CK | tee $R/exp_partial.log ;;
+  p1_fillin)         # 8: Phase 1 fill-in, what only the JEPA predictor can do, + figures (needs r3, a1, a2 .pt)
+    python p1_fillin.py --cfg configs/base.yaml ${EXTRA:-} | tee $R/p1_fillin.log ;;
   report)            # all of the above into results/exp_table.md
     python p2_exp_report.py --cfg $B ;;
   *) echo "unknown job $job"; exit 1 ;;

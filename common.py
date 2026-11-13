@@ -121,7 +121,7 @@ def to_input(img, norm, dev):
     return (x - mean) / std
 
 
-def encode(bb, x, keep=None, n_last=1, ctx=False):
+def encode(bb, x, keep=None, n_last=1, ctx=False, all_tokens=False):
     m = bb['ctx'] if ctx else bb['full']
     outs = []
     if bb['kind'] == 'ijepa':
@@ -150,7 +150,7 @@ def encode(bb, x, keep=None, n_last=1, ctx=False):
         if i >= len(m.blocks) - n_last:
             outs.append(m.norm(t[:, m.n_storage_tokens + 1:]))
     out = torch.stack(outs).mean(0)
-    return (out if keep is None else out[:, keep]), (h, w)
+    return (out if keep is None or all_tokens else out[:, keep]), (h, w)
 
 
 class Adapter(nn.Module):

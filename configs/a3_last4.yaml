@@ -1,4 +1,4 @@
 name: a3_last4
 backbone: dino_web
-option: native
+option: same
 layers: 4

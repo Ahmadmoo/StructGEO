@@ -119,6 +119,7 @@ bash run_exp.sh rgb_eval             # 5: m2 and m1 on thermal, satellite crops 
 bash run_exp.sh a2                   # 7: the JEPA run (backbone online, slower), so partial views can compare with it
 bash run_exp.sh partial              # 7: partial views on m1, m2 (and a2 if trained); needs the backbone
 bash run_exp.sh trust_wc loc_wc      # after m6_wc: fusion, protection levels and the map score on OSM + land cover
+bash run_exp.sh p1_fillin            # 8: Phase 1 fill-in test for the JEPA predictor + figures (needs the backbone)
 
 bash run_exp.sh report               # everything into results/exp_table.md
 ```
@@ -128,6 +129,10 @@ bash run_exp.sh report               # everything into results/exp_table.md
 | Path | What |
 |---|---|
 | `results/exp_table.md` | All experiments in tables (the source for slides) |
+| `results/p1_fillin.md`, `.json` | 8: hidden spots, other sensor: JEPA predictor vs DINOv3 mask tokens vs copying the nearest visible spot, by hole depth |
+| `results/p1_figs/fillin_<id>.png` | 8: row 1 JEPA (hidden image, truth, fill-in, hits), row 2 the same for a run without JEPA |
+| `results/p1_figs/space_<id>.png` | 8: RGB and thermal features in one PCA: rows frozen DINOv3, then each run (one file per row too) |
+| `results/p1_figs/match_<id>.png` | 8: where a thermal patch lands in the RGB image: frozen DINOv3 vs r3 |
 | `results/exp_trust_<run>_thermal.json` | 1: error and share within 25 m per k (all / city / village / day / night), coverage at 95% precision; 2: protection-level factor, coverage, availability and hazard per alert limit, per map-score bin and per confidence bin. `_frames.json`: every frame and k |
 | `results/exp_figs/fusion_<run>_thermal.png` | 1: share within 25 m and median error vs number of frames, city vs village |
 | `results/exp_figs/stanford_<run>_thermal.png` | 2: Stanford diagram (error vs protection level), 1 frame vs most frames |

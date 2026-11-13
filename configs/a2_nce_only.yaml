@@ -1,4 +1,4 @@
 name: a2_nce_only
 backbone: dino_web
-option: native
+option: same
 w_jepa: 0.0
