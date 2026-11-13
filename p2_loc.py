@@ -27,6 +27,8 @@ if a.ckpt:
 frames = load_frames(cfg)
 osm, om = load_osm(cfg)
 O, mod, ok_m = cfg['out_dir'], KIND[a.query][0], cfg['ok_m']
+mname = cfg.get('map_name') or 'osm'
+tag = a.query if mname == 'osm' else f'{a.query}_{mname}'   # results on other maps do not overwrite the OSM ones
 os.makedirs(f'{O}/exp_figs', exist_ok=True)
 fl = [f for f in frames[mod] if f['split'] in ('valid', 'test')]
 bs = cfg.get('eval_batch', 32)
@@ -40,7 +42,7 @@ rec = [dict(id=f['id'], split=f['split'], scene=f['scene'], place=place(f['scene
             **{f'{k}_true': float(v[j]) for k, v in st.items()}, margin_prior=float(sp['margin'][j]))
        for j, f in enumerate(fl)]
 scores = [k for k in rec[0] if k.endswith(('_true', '_prior')) and not k.startswith('content')] if rec else []
-res = dict(query=a.query, map=cfg.get('map_name') or 'osm', ckpt=a.ckpt, n=len(rec),
+res = dict(query=a.query, map=mname, ckpt=a.ckpt, n=len(rec),
            score_median={pc: {s: r4(np.median([r[s] for r in rec if r['place'] == pc])) for s in scores}
                          for pc in sorted({r['place'] for r in rec})},
            runs={})
@@ -66,7 +68,7 @@ for run in a.runs or cfg['loc_runs']:
                         auroc={s: r4(auroc(np.array([r[s] for r in te])[m], ok[m])) for s in scores},
                         auroc_run_confidence=r4(auroc(np.array([err[r['id']]['conf'] for r in te])[m], ok[m])))
     res['runs'][run] = out
-    plots.binned(f'{O}/exp_figs/loc_binned_{run}_{a.query}.png', [r['margin_true'] for r in te], ~ok, 5,
+    plots.binned(f'{O}/exp_figs/loc_binned_{run}_{tag}.png', [r['margin_true'] for r in te], ~ok, 5,
                  f'{run}: failures vs map distinctiveness (test)', 'map-only score at the true position (bins of equal size)')
     print(run, json.dumps({g: dict(n=v['n'], success=v['success'], auroc_map=v['auroc'].get('margin_true'),
                                    auroc_conf=v['auroc_run_confidence']) for g, v in out.items()}))
@@ -87,7 +89,7 @@ gsd = float(np.median([f['gsd'] for f in (tf or fl)]))
 pts = [dict(E=float(x), N=float(y), yaw=0.0, gsd=gsd) for y in ys for x in xs]
 print(f'area map: {len(xs)} x {len(ys)} points every {step} m')
 grid = map_score(cfg, osm, om, pts, mod, None, **kw)['margin'].reshape(len(ys), len(xs)).astype(np.float32)
-tif = f"{O}/exp_loc_{a.query}_{cfg['loc_area']}.tif"
+tif = f"{O}/exp_loc_{tag}_{cfg['loc_area']}.tif"
 with rasterio.open(tif, 'w', driver='GTiff', width=len(xs), height=len(ys), count=1, dtype='float32', crs=om['crs'],
                    transform=from_origin(xs[0] - step / 2, ys[0] + step / 2, step, step)) as d:
     d.write(grid[None])
@@ -104,10 +106,10 @@ if first:
     err = {r['id']: r['err'] for r in json.load(open(f'{O}/{first}_frames.json'))[a.query]}
     tt = [f for f in tf if f['id'] in err]
     pts_ok = ([f['E'] for f in tt], [f['N'] for f in tt], [err[f['id']] <= ok_m for f in tt])
-plots.loc_map(f"{O}/exp_figs/loc_area_{a.query}_{cfg['loc_area']}.png", grid, ext, bg, pts_ok,
-              f'map-only distinctiveness, {step} m grid' + (f'; dots: {first} test frames' if first else ''))
+plots.loc_map(f"{O}/exp_figs/loc_area_{tag}_{cfg['loc_area']}.png", grid, ext, bg, pts_ok,
+              f'map-only distinctiveness ({mname}), {step} m grid' + (f'; dots: {first} test frames' if first else ''))
 res['area'] = dict(tif=tif, step_m=step, extent=[r4(x) for x in ext], gsd=r4(gsd),
                    share_below_0p05=r4(float(np.mean(grid < 0.05))), median=r4(float(np.median(grid))))
-json.dump(res, open(f'{O}/exp_loc_{a.query}.json', 'w'), indent=1)
-json.dump(rec, open(f'{O}/exp_loc_{a.query}_frames.json', 'w'))
+json.dump(res, open(f'{O}/exp_loc_{tag}.json', 'w'), indent=1)
+json.dump(rec, open(f'{O}/exp_loc_{tag}_frames.json', 'w'))
 print(json.dumps(res['score_median']))

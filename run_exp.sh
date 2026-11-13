@@ -33,6 +33,10 @@ for job in "$@"; do
     python p2_trust.py --cfg $B --ckpt $R/$M2.pt | tee $R/exp_trust_$M2.log ;;
   loc)               # 3: map-only distinctiveness vs failures, area map
     python p2_loc.py --cfg $B --ckpt $R/$M1.pt --runs $M1 $M2 | tee $R/exp_loc.log ;;
+  trust_wc)          # 1 + 2 on the land-cover run (after m6_wc)
+    python p2_trust.py --cfg $B --ckpt $R/p2_m6_wc.pt | tee $R/exp_trust_p2_m6_wc.log ;;
+  loc_wc)            # 3 on the OSM + land-cover map, vs the land-cover run and m1 (after m6_wc)
+    python p2_loc.py --cfg $B --ckpt $R/p2_m6_wc.pt --runs p2_m6_wc $M1 | tee $R/exp_loc_wc.log ;;
   m5_dsm|m6_wc|m7_dsm_wc|m2r_random_adapter)   # 4 + 6: training runs
     python p2_train.py --cfg $B configs/p2_$job.yaml | tee $R/p2_$job.log ;;
   rgb_eval)          # 5: the same runs on thermal, satellite crops and drone RGB

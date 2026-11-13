@@ -118,6 +118,7 @@ bash run_exp.sh m2r_random_adapter   # 6: m2 with a random frozen adapter   (tra
 bash run_exp.sh rgb_eval             # 5: m2 and m1 on thermal, satellite crops and drone RGB
 bash run_exp.sh a2                   # 7: the JEPA run (backbone online, slower), so partial views can compare with it
 bash run_exp.sh partial              # 7: partial views on m1, m2 (and a2 if trained); needs the backbone
+bash run_exp.sh trust_wc loc_wc      # after m6_wc: fusion, protection levels and the map score on OSM + land cover
 
 bash run_exp.sh report               # everything into results/exp_table.md
 ```
@@ -134,7 +135,8 @@ bash run_exp.sh report               # everything into results/exp_table.md
 | `results/exp_figs/loc_binned_<run>_thermal.png` | 3: failure rate per bin of map distinctiveness |
 | `results/p2_m5_dsm.json`, `p2_m6_wc.json`, `p2_m7_dsm_wc.json`, `p2_m2r_random_adapter.json` | 4, 6: training runs, same format as the other Phase 2 runs (also in `p2_table.md` after `p2_report.py`) |
 | `results/exp_evalq_<run>.json` | 5: the run on each query kind, per day / night and city / village |
-| `results/exp_partial.json` | 7: full view vs part hidden (masked) vs part predicted |
+| `results/exp_partial.json` | 7: full view vs part hidden at the backbone input (masked) vs part predicted vs part dropped only from the template (cut); a 0.0 in `partial_frac` checks the masked path against the full view |
+| `results/exp_loc_thermal_osm_wc.json` (and `_test.tif`, figures) | 3 on the OSM + land-cover map (`loc_wc`); outputs on maps other than `osm` carry the map name |
 
 ### Files
 | File | Role |

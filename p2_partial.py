@@ -1,7 +1,10 @@
 """Experiment 7: partial views. Part of each thermal frame is hidden at the DINOv3 input (mask token, so the visible
 tokens never see it), and a run matches with what is left ('masked': hidden tokens carry no template weight), or the
 Phase 1 predictor fills in the hidden tokens from the visible ones ('predicted': the predictor guesses the RGB-side
-tokens there; its layer-normed output is put back on the scale of the visible tokens). Compared with the full view.
+tokens there; its layer-normed output is put back on the scale of the visible tokens). Compared with the full view and
+with 'cut': the same part dropped only from the template, on unmasked features (the visible tokens still saw the hidden
+part, so 'cut' is an optimistic bound: if 'cut' stays high while 'masked' drops, the loss comes from the backbone seeing
+mask tokens, not from the missing ground). A 0.0 in partial_frac checks that the masked path gives the full-view answer.
 Evaluation only; needs the backbone and the cached thermal images."""
 import argparse, json
 import numpy as np
@@ -68,7 +71,8 @@ def record(M, fb, logits, b):
 
 
 rec = {(m.name, cond, fr): {'valid': [], 'test': []} for m in models
-       for cond, fr in [('full', 0.0)] + [(cd, f) for f in c['partial_frac'] for cd in ('masked', 'predicted')]}
+       for cond, fr in [('full', 0.0)] + [(cd, f) for f in c['partial_frac'] for cd in ('cut', 'masked', 'predicted')
+                                          if f > 0 or cd == 'masked']}
 for si, split in enumerate(('valid', 'test')):
     ids = [f['id'] for f in fl if f['split'] == split]
     for s0 in range(0, len(ids), EB):
@@ -84,12 +88,16 @@ for si, split in enumerate(('valid', 'test')):
                 tk, _ = encode(bb, x, keep=keep, n_last=L, ctx=True)
             vis = torch.as_tensor(~hid, device=dev)[None].expand(len(idx), -1, -1)
             for M in models:
+                if fr > 0:
+                    rec[(M.name, 'cut', fr)][split] += record(M, fb, *M.match('thermal', fb, mask=vis))
                 with torch.no_grad(), torch.autocast(**amp):
                     zv = M.ad(tk.float(), TH).float()
                 z = torch.zeros(len(idx), gh * gw, zv.shape[-1], device=dev)
                 z[:, keep] = zv
                 rec[(M.name, 'masked', fr)][split] += record(M, fb, *M.match('thermal', fb, z=z.view(len(idx), gh, gw, -1),
                                                                                mask=vis))
+                if not len(hix):                                       # 0% hidden: a check that must match the full view
+                    continue
                 with torch.no_grad(), torch.autocast(**amp):
                     pr = M.pr(zv, uv[keep], uv[hix], TH, RGB).float()
                 mu, sd = zv.mean(-1).mean(1), zv.std(-1).mean(1)       # put the prediction on the visible tokens' scale
@@ -107,4 +115,11 @@ for (name, cond, fr), r in rec.items():
     print(f"{name:<24} {cond:<10} {fr:>6.0%} {t['all']['median_m']:>7.1f} {t['all']['r@25m']:>6.0%} {cell('city'):>14} "
           f"{cell('village'):>14}")
 res['predictor_from'] = {m.name: m.ck_cfg.get('p1_ckpt') for m in models}
+if 0.0 in c['partial_frac']:   # the masked path with nothing hidden must give the full-view answer
+    for m in models:
+        a0 = {r['id']: r['err'] for r in rec[(m.name, 'full', 0.0)]['test']}
+        d = [abs(r['err'] - a0[r['id']]) for r in rec[(m.name, 'masked', 0.0)]['test']]
+        res.setdefault('check_masked_0_vs_full', {})[m.name] = dict(max_diff_m=max(d), frames_differ=sum(x > 0.5 for x in d))
+        print(f'{m.name}: masked path with 0% hidden vs full view, max error difference {max(d):.2f} m, '
+              f'{sum(x > 0.5 for x in d)} of {len(d)} frames differ by > 0.5 m')
 json.dump(res, open(f'{O}/exp_partial.json', 'w'), indent=1)
