@@ -1,0 +1,7 @@
+# Exp 4a: m1 on a map with buildings from the DSM added to OSM (OSM buildings are thin outside the city).
+# Map: python p2_osm.py --cfg ... configs/p2_m5_dsm.yaml   (writes osm_dsm.npy; osm.npy is not touched)
+name: p2_m5_dsm
+map_name: osm_dsm
+dsm_buildings: true
+train_queries: [thermal]
+test_queries: [thermal, sat]

@@ -235,3 +235,28 @@ Median and mean error (m); % within 5 / 10 / 25 / 50 m; heading error; AUROC of 
 | Laser range hits a roof → wrong scale | Rolling median along the flight; ±5% scale jitter in training |
 | Phase 2 disk | ~31 GB of features per query kind (DINOv3 ViT-L, 640×512); thermal + satellite ≈ 62 GB |
 | MultiFly not released in time | Run the three-sensor test on MS2 first |
+
+## 12. PoC experiments for the Nov 17 preview (branch `phase2-exp`)
+Story for the preview: **any sensor, free maps, and a position you can trust.** Phase 1 shows the shared structure
+(frozen DINOv3 already pairs RGB and thermal patches; a small adapter makes it shared). Phase 2 places a thermal frame
+on OpenStreetMap where the map has structure. The new pillar is trust: an error bound on every answer, and knowing
+before a flight where the map is good enough. Predictive learning (JEPA) moves to a research question for partial views.
+
+| # | Experiment | Script | Retrain? | What would count as a result |
+|---|---|---|---|---|
+| 1 | Fuse the last k frames (simulated GPS loss: prior ±100 m; odometry drift 2% between frames) | `p2_trust.py` | no | village share within 25 m rises with k; city stays |
+| 2 | Protection level: radius holding 99% / 95% of the probability, scaled on validation (split conformal); per map-score bin; Stanford diagram | `p2_trust.py` | no | coverage near nominal overall; the city/village gap shrinks per bin |
+| 3 | Map-only distinctiveness (no sensor) vs real failures; area map | `p2_loc.py` | no | AUROC well above 0.5, also within city and within village |
+| 4 | Richer free maps: DSM buildings, ESA WorldCover land cover | `p2_osm.py`, `p2_landcover.py`, `p2_train.py` (m5, m6, m7) | yes | village error drops |
+| 5 | One matcher, three sensors: satellite-trained m2 on thermal, satellite crops and drone RGB (same footprint) | `p2_pair.py`, `p2_evalq.py` | no | RGB works by day, fails at night; thermal works at both |
+| 6 | m2 with a random frozen adapter | `p2_train.py` (m2r) | yes | tells whether the transfer comes from DINOv3 or from Phase 1 |
+| 7 | Partial views: part of the frame hidden; the Phase 1 predictor fills it in | `p2_partial.py` | no | the predicted view beats the masked view |
+
+Notes
+- k = 1 in experiment 1 is exactly the single-frame result (checked against the run's `_frames.json`).
+- Fusion simulates odometry; say so on any slide that shows it. The drift is systematic per window (scale and heading),
+  while fusion assumes independent errors per frame, so the simulation is not tuned to the fusion.
+- Validation and test are different places, so the conformal guarantee (exchangeability) does not strictly hold: the
+  test coverage is the measurement, not a promise.
+- The public Thermal-UAV release appears to hold thermal images only. Experiment 5 needs the drone RGB (Visible) images;
+  without them, the satellite crop is the RGB stand-in (m2 already tests satellite → thermal).

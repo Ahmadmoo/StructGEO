@@ -10,7 +10,10 @@ from p2_common import work_size
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--cfg', nargs='+', required=True)
-cfg = load_cfg(*ap.parse_args().cfg)
+ap.add_argument('--only', nargs='+', help='rebuild only these modalities and keep the others in frames.json as they are '
+                                          '(e.g. --only visible adds the drone RGB frames without touching the thermal list)')
+a = ap.parse_args()
+cfg = load_cfg(*a.cfg)
 R, P = cfg['tuav_root'], cfg['p2_cache']
 os.makedirs(P, exist_ok=True)
 ref = rasterio.open(os.path.join(R, cfg['ref_tif']))
@@ -61,7 +64,15 @@ assert cfg['prior_m'] < cfg['search_m'] and cfg['yaw_noise'] <= cfg['yaw_range']
 rng = np.random.default_rng(cfg['seed'])
 b = ref.bounds
 frames, info = {}, dict(crs=ref.crs.to_wkt(), ref_bounds=list(b), ref_res=list(ref.res), sources={})
-for mod in cfg['p2_modalities']:
+if a.only:
+    old_f, old_i = f'{P}/frames.json', f'{P}/p2_meta.json'
+    if os.path.exists(old_f):
+        frames = {m: v for m, v in json.load(open(old_f)).items() if m not in a.only}
+    if os.path.exists(old_i):
+        old = json.load(open(old_i))
+        info['sources'] = {k: v for k, v in old.get('sources', {}).items() if k.split('_', 1)[1] not in a.only}
+        info.update({m: old[m] for m in frames if m in old})
+for mod in (a.only or cfg['p2_modalities']):
     W, H = work_size(cfg, mod)
     rows = []
     for split in ('train', 'valid', 'test'):
@@ -140,7 +151,8 @@ for mod in cfg['p2_modalities']:
         print(f'WARNING: {mod}: some footprints are larger than the template ({tm} m); their corners are cut. '
               f'Raise tmpl_m{"" if mod == "thermal" else "_visible"} if this is common.')
 
-json.dump(frames, open(f'{P}/frames.json', 'w'))
+json.dump(frames, open(f'{P}/frames.json.tmp', 'w'))
+os.replace(f'{P}/frames.json.tmp', f'{P}/frames.json')
 json.dump(info, open(f'{P}/p2_meta.json', 'w'), indent=1)
 
 m = cfg['osm_margin_m']

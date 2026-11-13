@@ -15,12 +15,13 @@ ap.add_argument('--force', action='store_true')
 a = ap.parse_args()
 cfg = load_cfg(*a.cfg)
 R, P, res = cfg['tuav_root'], cfg['p2_cache'], cfg['osm_res']
+NAME = cfg.get('map_name') or 'osm'  # e.g. osm_dsm for the map with DSM buildings; runs pick a map with map_name
 os.makedirs(P, exist_ok=True)
 SRC = dict(osm_files=cfg['osm_files'], overture=cfg.get('overture_buildings'), dsm_buildings=bool(cfg.get('dsm_buildings')),
            res=res, margin=cfg['osm_margin_m'], edge_m=cfg['edge_m'])
-if not a.force and os.path.exists(f'{P}/osm.npy') and os.path.exists(f'{P}/osm_meta.json'):
-    if json.load(open(f'{P}/osm_meta.json')).get('source') == SRC:
-        print('osm.npy is up to date (use --force to rebuild)')
+if not a.force and os.path.exists(f'{P}/{NAME}.npy') and os.path.exists(f'{P}/{NAME}_meta.json'):
+    if json.load(open(f'{P}/{NAME}_meta.json')).get('source') == SRC:
+        print(f'{NAME}.npy is up to date (use --force to rebuild)')
         raise SystemExit(0)
 os.makedirs(f"{cfg['out_dir']}/p2_figs", exist_ok=True)
 ref = rasterio.open(os.path.join(R, cfg['ref_tif']))
@@ -206,12 +207,13 @@ if cfg.get('dsm_buildings'):
 cov = {c: round(float((L[i] > 0).mean()), 4) for i, c in enumerate(CH)}
 inner = (slice(None), slice(int(mg / res), H - int(mg / res)), slice(int(mg / res), W - int(mg / res)))
 cov_ref = {c: round(float((L[inner][i] > 0).mean()), 4) for i, c in enumerate(CH)}
-np.save(f'{P}/osm.npy', L)
+np.save(f'{P}/{NAME}.npy.tmp.npy', L)
+os.replace(f'{P}/{NAME}.npy.tmp.npy', f'{P}/{NAME}.npy')
 json.dump(dict(x0=x0, y0=y0, res=res, width=W, height=H, crs=ref.crs.to_wkt(), channels=CH, counts=cnt,
-               coverage=cov, coverage_ref_area=cov_ref, source=SRC), open(f'{P}/osm_meta.json', 'w'), indent=1)
+               coverage=cov, coverage_ref_area=cov_ref, source=SRC), open(f'{P}/{NAME}_meta.json', 'w'), indent=1)
 s = max(1, int(np.ceil(max(H, W) / 2048)))
 small = np.stack([cv2.resize(c, (W // s, H // s), interpolation=cv2.INTER_AREA) for c in L])
-cv2.imwrite(f"{cfg['out_dir']}/p2_figs/osm_preview.png", cv2.cvtColor(colorize(small), cv2.COLOR_RGB2BGR))
+cv2.imwrite(f"{cfg['out_dir']}/p2_figs/{NAME}_preview.png", cv2.cvtColor(colorize(small), cv2.COLOR_RGB2BGR))
 print('counts', cnt)
 print('coverage in the reference-map area', cov_ref)
 if cov_ref['building'] < 0.05:

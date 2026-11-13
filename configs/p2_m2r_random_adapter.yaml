@@ -1,0 +1,9 @@
+# Exp 6 (control for m2): trained on satellite crops only, adapter frozen at RANDOM weights (no Phase 1).
+# If this still works on thermal frames, the RGB -> thermal transfer comes from DINOv3 itself; if it fails, from Phase 1.
+name: p2_m2r_random_adapter
+train_queries: [sat]
+test_queries: [thermal, sat]
+p1_ckpt: null
+adapter_lr: 0
+w_nce: 0
+w_jepa: 0

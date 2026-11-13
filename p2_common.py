@@ -1,5 +1,6 @@
 """Phase 2 helpers: camera footprint geometry, map windows, BEV templates, FFT matching, heads, metrics."""
 import json
+import os
 import cv2
 import numpy as np
 import torch
@@ -9,8 +10,9 @@ from common import RGB, TH
 
 CH = ['major_road', 'minor_road', 'building', 'building_edge', 'water']
 PALETTE = np.array([[230, 70, 50], [235, 235, 235], [240, 165, 70], [110, 55, 20], [70, 130, 230]], np.float32)
-# query kind -> (frame list it uses, adapter branch). 'sat' = satellite crop rendered at a thermal frame's footprint.
-KIND = {'thermal': ('thermal', TH), 'sat': ('thermal', RGB), 'visible': ('visible', RGB)}
+# query kind -> (frame list it uses, adapter branch). 'sat' = satellite crop rendered at a thermal frame's footprint,
+# 'vis2th' = the drone RGB frame taken with a thermal frame, resampled into that thermal frame's footprint (p2_pair.py).
+KIND = {'thermal': ('thermal', TH), 'sat': ('thermal', RGB), 'visible': ('visible', RGB), 'vis2th': ('thermal', RGB)}
 
 
 def load_frames(cfg):
@@ -18,16 +20,20 @@ def load_frames(cfg):
 
 
 def load_osm(cfg):
-    P = cfg['p2_cache']
-    return np.load(f'{P}/osm.npy', mmap_mode='r'), json.load(open(f'{P}/osm_meta.json'))
+    """The map raster named by map_name (default osm: OSM roads, buildings, water; other names add DSM buildings or
+    land cover, see p2_osm.py and p2_landcover.py)."""
+    P, name = cfg['p2_cache'], cfg.get('map_name') or 'osm'
+    return np.load(f'{P}/{name}.npy', mmap_mode='r'), json.load(open(f'{P}/{name}_meta.json'))
 
 
-def cache_key(frames, kind):
+def cache_key(frames, kind, cfg=None):
     """Identifies the frame list (and, for satellite crops, the footprints) a cached image/feature file was made from."""
     import hashlib
     fl = frames[KIND[kind][0]]
     rows = [[f['path']] + ([round(f['E'], 2), round(f['N'], 2), round(f['yaw'], 3), round(f['gsd'], 5)] if kind == 'sat' else [])
-            for f in fl]
+            + ([f.get('vis')] if kind == 'vis2th' else []) for f in fl]
+    if kind == 'vis2th':
+        rows.append((cfg or {}).get('vis2th_splits'))
     return hashlib.md5(json.dumps(rows).encode()).hexdigest()[:12]
 
 
@@ -94,6 +100,46 @@ def render_sat(src, f, wh, **kw):
     h = np.array([[1, 0, .5], [0, 1, .5], [0, 0, 1.0]])  # pixel index <-> continuous coordinate
     P = np.linalg.inv(h) @ P @ h
     return cv2.warpAffine(np.ascontiguousarray(im), P[:2], (W, H), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+
+
+def warp_down(im, P, wh):
+    """Resample image im into a W x H output; P maps output pixel coordinates (continuous) to im pixel coordinates.
+    Pre-shrinks im by an integer factor first when it is much finer than the output (avoids aliasing)."""
+    W, H = wh
+    k = int(np.hypot(P[0, 0], P[1, 0]))
+    if k >= 2:
+        h0, w0 = im.shape[:2]
+        im = cv2.resize(im, (max(1, w0 // k), max(1, h0 // k)), interpolation=cv2.INTER_AREA)
+        P = np.diag([im.shape[1] / w0, im.shape[0] / h0, 1.0]) @ P
+    h = np.array([[1, 0, .5], [0, 1, .5], [0, 0, 1.0]])
+    P = np.linalg.inv(h) @ P @ h
+    return cv2.warpAffine(np.ascontiguousarray(im), P[:2], (W, H), flags=cv2.INTER_LINEAR | cv2.WARP_INVERSE_MAP)
+
+
+def vis_map(f, wh, vis_wh, src_wh, shift):
+    """3x3: thermal-frame pixel (u, v) of frame f -> pixel of its paired RGB file (size src_wh), from both metadata poses;
+    the scene point at thermal (u + dx, v + dy) is taken, shift = (dx, dy)."""
+    v = f['vis']
+    fv = dict(E=v['E'], N=v['N'], yaw=v['yaw'], gsd=v['gsd'] * vis_wh[0] / src_wh[0])  # ground size of one file pixel
+    return np.linalg.inv(img2world(fv, src_wh)) @ img2world(f, wh) @ np.array([[1, 0, shift[0]], [0, 1, shift[1]], [0, 0, 1.0]])
+
+
+def read_rgb(path):
+    im = cv2.imread(path, cv2.IMREAD_COLOR)
+    if im is None:
+        raise FileNotFoundError(path)
+    return cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+
+
+def render_vis(f, wh, root, vis_wh):
+    """The drone RGB frame paired with thermal frame f (f['vis'], written by p2_pair.py) resampled into f's footprint,
+    with the RGB-to-thermal pixel offset p2_pair.py found (vis dx, dy). Zeros if f has no pair."""
+    W, H = wh
+    v = f.get('vis')
+    if not v:
+        return np.zeros((H, W, 3), np.uint8)
+    im = read_rgb(os.path.join(root, v['path']))
+    return warp_down(im, vis_map(f, wh, vis_wh, im.shape[1::-1], (v.get('dx', 0.0), v.get('dy', 0.0))), wh)
 
 
 def load_gray(path, wh):
@@ -226,7 +272,7 @@ class MapEncoder(nn.Module):
     def __init__(s, cfg):
         super().__init__()
         c = cfg['map_width']
-        s.e0, s.e1, s.e2, s.e3 = block(len(CH), c), block(c, 2 * c), block(2 * c, 4 * c), block(4 * c, 4 * c)
+        s.e0, s.e1, s.e2, s.e3 = block(cfg.get('map_ch', len(CH)), c), block(c, 2 * c), block(2 * c, 4 * c), block(4 * c, 4 * c)
         s.d2, s.d1 = block(8 * c, 4 * c), block(6 * c, 2 * c)
         s.out = nn.Conv2d(2 * c, cfg['match_dim'], 1)
 
@@ -247,7 +293,8 @@ class BEVHead(nn.Module):
         d, w = cfg['dim'], cfg['bev_width']
         s.net = nn.Sequential(nn.Conv2d(d, w, 3, padding=1), nn.GroupNorm(8, w), nn.GELU(),
                               nn.Conv2d(w, w, 3, padding=1), nn.GroupNorm(8, w), nn.GELU())
-        s.feat, s.conf, s.layout = nn.Conv2d(w, cfg['match_dim'], 1), nn.Conv2d(w, 1, 1), nn.Conv2d(w, len(CH), 1)
+        s.feat, s.conf = nn.Conv2d(w, cfg['match_dim'], 1), nn.Conv2d(w, 1, 1)
+        s.layout = nn.Conv2d(w, cfg.get('map_ch', len(CH)), 1)
 
     def forward(s, z):
         x = s.net(z.permute(0, 3, 1, 2))

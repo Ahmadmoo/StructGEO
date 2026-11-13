@@ -1,0 +1,8 @@
+# Exp 4c: both: OSM + DSM buildings + WorldCover land cover.
+# Map: after the m5 map exists, python p2_landcover.py --cfg ... configs/p2_m7_dsm_wc.yaml   (writes osm_dsm_wc.npy)
+name: p2_m7_dsm_wc
+map_name: osm_dsm_wc
+lc_base: osm_dsm
+dsm_buildings: true
+train_queries: [thermal]
+test_queries: [thermal, sat]

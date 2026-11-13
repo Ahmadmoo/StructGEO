@@ -19,12 +19,13 @@ torch.manual_seed(cfg['seed'])
 rng = np.random.default_rng(cfg['seed'])
 frames = load_frames(cfg)
 osm, om = load_osm(cfg)
+cfg['map_ch'] = len(om['channels'])  # saved with the weights, so the experiment scripts rebuild the same model
 G = {m: match_geo(cfg, m) for m in frames}
 paired = ('thermal', 'sat')
 need = set(cfg['train_queries']) | set(cfg['test_queries']) | (set(paired) if cfg['w_nce'] > 0 or cfg['w_jepa'] > 0 else set())
 for k in need:
     side = f'{P}/p2_img_{k}.key'
-    assert os.path.exists(side) and open(side).read() == cache_key(frames, k), f'{k}: cache is stale or missing, run p2_cache.py'
+    assert os.path.exists(side) and open(side).read() == cache_key(frames, k, cfg), f'{k}: cache is stale or missing, run p2_cache.py'
 feat = {k: np.load(f'{P}/p2_feat_{bbn}_L{L}_{k}.npy', mmap_mode='r') for k in need}
 D = feat[cfg['train_queries'][0]].shape[-1]
 amp = dict(device_type=dev.split(':')[0], dtype=torch.bfloat16)
@@ -144,7 +145,7 @@ for kind in cfg['test_queries']:
     qimg = np.load(ip, mmap_mode='r') if os.path.exists(ip) else None
     rec = {}
     for split in ('valid', 'test'):
-        ids = [f['id'] for f in frames[mod] if f['split'] == split]
+        ids = [f['id'] for f in frames[mod] if f['split'] == split and (kind != 'vis2th' or f.get('vis'))]
         rec[split] = []
         for s0 in range(0, len(ids), cfg['p2_batch']):
             idx = ids[s0:s0 + cfg['p2_batch']]

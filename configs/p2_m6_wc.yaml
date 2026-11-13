@@ -1,0 +1,7 @@
+# Exp 4b: m1 on OSM + free global land cover (ESA WorldCover 2021, 10 m: tree, grass/shrub, crop, built-up, bare, water).
+# Map: python p2_landcover.py --cfg ... configs/p2_m6_wc.yaml   (writes osm_wc.npy from osm.npy; needs worldcover_tifs)
+name: p2_m6_wc
+map_name: osm_wc
+lc_base: osm
+train_queries: [thermal]
+test_queries: [thermal, sat]

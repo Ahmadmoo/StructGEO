@@ -1,0 +1,39 @@
+# PoC experiments (branch phase2-exp). Load after p2_base.yaml:
+#   --cfg configs/base.yaml configs/p2_base.yaml configs/p2_exp.yaml [configs/<run>.yaml]
+eval_batch: 32                 # frames per matcher call in the evaluation scripts (lower it if the GPU runs out of memory)
+
+# 1. sequence fusion (p2_trust.py)
+fuse_k: [1, 2, 3, 5, 10, 20]   # frames fused; the newest is the one being placed
+fuse_min_gap_m: 25             # frames in a window are at least this far apart along the track
+fuse_max_gap_m: 400            # a larger jump between consecutive frames starts a new track
+fuse_max_dt_s: 60              # so does a larger gap in the DJI time stamps of the file names
+fuse_every: 1                  # evaluate every n-th frame of a track (2 halves the time)
+odo_drift: 0.02                # odometry error between frames: RMS 2% of the distance (scale + heading error)
+fuse_eps: [0.01, 0.05, 0.2]    # uniform floor per frame before multiplying; picked on validation
+
+# 2. protection levels (p2_trust.py)
+pl_alpha: [0.05, 0.01]         # PL holds 1 - alpha of the probability (95%, 99%)
+pl_alert_m: [25, 50]           # alert limits: availability (PL <= limit) and hazardous misleading (error > limit >= PL)
+loc_bins: 3                    # place-aware factors: bins of map score or confidence (edges = validation tertiles)
+
+# 3. map-only localizability (p2_loc.py; the map score is also used by p2_trust.py)
+loc_excl_m: 20                 # "another place" = more than 20 m from the true one
+loc_beta: 10                   # score scale for the map-only probability (as in p2_check.py)
+loc_grid_m: 50                 # spacing of the area map
+loc_area: test                 # test: box around the test flights (+ 500 m); all: the whole map
+loc_runs: [p2_m1_thermal, p2_m2_sat_only]
+
+# 4. map variants: map_name picks the raster (osm = OSM only); set per run config
+map_name: osm
+lc_base: osm                   # p2_landcover.py adds land cover to this map
+worldcover_tifs: []            # ESA WorldCover 2021 tiles (p2_landcover.py prints the download links)
+
+# 5. drone RGB in the thermal footprint (p2_pair.py, p2_cache.py --kinds vis2th, p2_evalq.py)
+pair_max_m: 5                  # pose fallback when file names do not pair: max distance and heading difference
+pair_max_yaw: 5
+pair_shift_px: 24              # p2_pair.py searches the RGB-to-thermal offset within +-24 thermal pixels
+vis2th_splits: [valid, test]   # only the frames needed for evaluation are rendered and cached
+
+# 7. partial views (p2_partial.py)
+partial_frac: [0.25, 0.5]      # share of the frame hidden
+partial_mode: side             # side: a strip on one side (left, right, top or bottom); blocks: random rectangles

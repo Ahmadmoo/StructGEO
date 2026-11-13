@@ -9,3 +9,5 @@ scikit-image
 rasterio
 pyproj
 shapely
+# experiments
+matplotlib
