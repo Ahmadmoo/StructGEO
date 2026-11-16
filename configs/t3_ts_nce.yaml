@@ -1,0 +1,4 @@
+name: t3_ts_nce
+use_sensors: [thr, sat]
+w_nce: 1.0
+w_var: 0.1

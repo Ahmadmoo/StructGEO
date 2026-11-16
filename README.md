@@ -212,3 +212,42 @@ bash run_ms2.sh      # prep → zero-shot → 5 runs → SIGReg weight sweep →
 | `report3.py` | `results_ms2/table.md` |
 
 Tested end to end on a synthetic MS2-format dataset with a random small DINOv3 on CPU. Token matching gave a 0.99 / 0.98 pixel correlation for RGB / LiDAR, and flipped extrinsics were caught. With longer training on that toy data, `m3_nce`, `m3_inv` and `m3_lejepa` learned the alignment, while `m3_hid` and `m3_hid_own` stayed near chance. Those numbers say nothing about real data. It has not run on real MS2 yet, so expect small fixes on the first run.
+
+## The map as a third view (Thermal-UAV)
+Thermal, satellite RGB and the OSM map, all seen straight down from the same footprint, are three views of one place. **Can one adapter put all three in one shared space with the LeJEPA-style objective, so that matching a frame to the map works like matching two sensors?**
+
+### Setup
+Nothing new to download: this reuses the Phase 2 cache (`frames.json`, `p2_img_{thermal,sat}.npy`, `p2_feat_*_{thermal,sat}.npy` from `p2_cache.py`, and the map raster from `p2_osm.py` / `p2_landcover.py`). Use the same Phase 2 config you ran with, and set `cache_dir` in `configs/tuav3.yaml`. `map_name: osm_wc` uses OSM + land cover; set `osm` for OSM only.
+
+```bash
+bash run_tuav3.sh    # prep → zero-shot → 6 runs → results_tuav3/table.md
+```
+
+### Check after `prep_tuav3.py`
+- `cache_dir/figs/align_*.png`: thermal | satellite | map | thermal + map | satellite + map. Roads and buildings must line up.
+- `tuav_meta.json` → `fwd_valid`: the share of tokens with map content (`map_valid_dilate` grows it by one token). With land cover it is close to 1.
+- Disk: the rendered map images (`tuav_img_map.npy`) are the size of `p2_img_thermal.npy`, and their DINOv3 features the size of `p2_feat_*_thermal.npy`.
+
+### How the map view is built
+- **Rendering:** the map raster (1 m) is warped into each thermal frame with the Phase 2 footprint geometry (`img2world`). Raw layers are kept at 1/4 resolution (`map_down`) for the CNN option. A colored image is made at full size for DINOv3.
+- **Same grid:** all three views sit on the thermal token grid, so no matching step is needed.
+- **Valid spots:** a map token counts only if a layer has content near it. The satellite crop counts where it lies inside the reference image.
+
+### Runs
+| Run | Views | Loss | Question |
+|---|---|---|---|
+| `zs_dino_web_L1` | thermal, sat, map | none | How shared is raw DINOv3, including on a rendered map? |
+| `t3_ts_nce` | thermal, sat | NCE + variance | Baseline without the map |
+| `t3_ts_lejepa` | thermal, sat | invariance + hidden spots + SIGReg | JEPA without the map |
+| `t3_tsm_nce` | thermal, sat, map | NCE over all pairs | Contrastive with the map |
+| `t3_tsm_lejepa` | thermal, sat, map | invariance + hidden spots + SIGReg | The map as a full view |
+| `t3_tsm_split` | thermal, sat, map | same, split embedding | The map shares only the first 128 dims (structure); the other 128 are shared by the sensors only (appearance) |
+| `t3_tsm_split_cnn` | thermal, sat, map | same, map through a small trained CNN on the raw layers | Is a trained map encoder better than DINOv3 on a rendered map? |
+
+- **Split embedding:** `struct_dim` and `struct_only`. Pairs that include the map are scored on the shared dims only.
+- **`sig_valid: [map]`:** SIGReg on the map uses only tokens with map content.
+- **Hidden spots with the map as context:** the map tokens are masked in the DINOv3 pass. With the CNN, the hidden region of the layers is set to zero.
+
+Outputs are the same as for MS2, with hit@1 per sensor pair and per place and condition (city/village × day/night).
+
+Tested end to end on a synthetic Phase 2 cache with a random small DINOv3 on CPU: the rendered map lines up with the frames, and every run trains and reports. Those numbers say nothing about real data. It has not run on the real Thermal-UAV cache yet.

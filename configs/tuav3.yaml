@@ -1,0 +1,31 @@
+# load after base.yaml and your Phase 2 config: --cfg configs/base.yaml configs/p2_base.yaml configs/tuav3.yaml
+data_prefix: tuav
+cache_dir: /path/to/structgeo_cache/tuav3
+out_dir: results_tuav3
+backbone: dino_web
+layers: 1
+
+map_name: osm_wc
+map_down: 4
+map_valid_dilate: 1
+map_encoder: dino
+use_sensors: null
+struct_dim: 0
+struct_only: []
+sig_valid: [map]
+
+min_valid: 20
+n_fig: 4
+hid_target: center
+hid_detach: true
+sig_proj: 256
+sig_n: 256
+w_inv: 0.0
+w_sig: 0.0
+w_hid: 0.0
+w_nce: 0.0
+w_var: 0.0
+w_jepa: 0.0
+
+batch: 32
+epochs: 15

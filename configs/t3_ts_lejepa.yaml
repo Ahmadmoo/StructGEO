@@ -1,0 +1,5 @@
+name: t3_ts_lejepa
+use_sensors: [thr, sat]
+w_inv: 1.0
+w_hid: 1.0
+w_sig: 0.002
