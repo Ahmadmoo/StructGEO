@@ -158,3 +158,57 @@ bash run_exp.sh report               # everything into results/exp_table.md
 Changes to Phase 2 files: maps are picked by `map_name` (default `osm`, so earlier runs load as before), the map encoder and layout head take the map's channel count, a new query kind `vis2th`, `p2_prep.py --only visible` (adds RGB frames without touching the thermal list or its caches), and `p2_cache.py` can limit a kind to some splits.
 
 Tested end to end on the synthetic data (CPU, small random backbones): k = 1 reproduces each run's single-frame errors exactly, `p2_pair.py` recovers a planted 3 m camera offset (10 px), and every job above runs and reports. Not yet run on the real data.
+
+## Phase 1 with three sensors (MS2)
+Same claim with RGB, thermal and LiDAR: **can one adapter put all three sensors in one shared space, and does a JEPA-style objective do it without a contrastive loss?**
+
+### Setup
+Edit `configs/ms2.yaml`: `ms2_root` (the folder with `sync_data/`, `proj_depth/` and the `*_list.txt` split files; if the lists are missing, copy them from `MS2dataset/` in the MS2 GitHub repo) and `cache_dir`. DINOv3 paths come from `configs/base.yaml`.
+
+```bash
+bash run_ms2.sh      # prep → zero-shot → 5 runs → SIGReg weight sweep → results_ms2/table.md
+```
+
+### Check after `prep_ms2.py`
+- `cache_dir/ms2_meta.json`:
+  - `depth_err_median` (per sensor) should be close to 0, well under 0.01. A larger value means the extrinsics are applied in the wrong direction.
+  - `depth_agree` is the share of projected points that agree with the other camera's own depth. It should be high.
+  - `n_frames` per split. Feature cache size is about 4 MB per frame with ViT-L (three sensors), so 5,000 frames ≈ 20 GB. Raise `frame_step` to use less.
+- `cache_dir/figs/corr_*.png`: thermal | RGB | LiDAR. Dots of the same color must sit on the same object in all three images.
+
+### How the data is built
+- **Reference grid:** thermal tokens. Each thermal token gets a depth from MS2's `depth_filtered` (median of the patch; skipped if too few points or the depth spreads too much).
+- **Token matching:** thermal token + depth → 3D → the other camera with MS2's calibration. A match is kept only if that camera's own projected depth agrees (`occ_tol`), which removes occluded spots.
+- **LiDAR as an image:** the single-scan depth (`lidar_depth: depth`) and intensity, rendered in the NIR camera (`lidar_plane: nir`), holes filled. Channels: inverse depth, intensity, inverse depth. It sits in its own camera, so it is not on the thermal grid.
+- **Scale:** RGB and NIR images are resized so one token covers about the same angle as one thermal token (`match_scale`).
+
+### Runs
+| Run | Loss | Question |
+|---|---|---|
+| `zs_dino_web_L1` | none (raw DINOv3) | How shared is the frozen space already? |
+| `m3_nce` | NCE over all sensor pairs + variance | The Phase 1 anchor, as the baseline |
+| `m3_inv` | invariance + SIGReg | Do the sensors meet with no negatives (LeJEPA-style)? |
+| `m3_lejepa` | invariance + hidden-spot prediction + SIGReg | Full JEPA: same spot → one embedding; hidden spots predicted from another sensor |
+| `m3_hid` | hidden-spot prediction of the shared target + SIGReg | Is prediction alone enough? |
+| `m3_hid_own` | hidden-spot prediction of each sensor's own embedding (sensor-aware queries) + SIGReg | The Phase 1 "two dialects" setup |
+| `m3_inv_sig*` | `m3_inv` with SIGReg weight 0.01 / 0.05 | Sensitivity to the one knob |
+
+- **Invariance:** at each matched spot, every sensor's embedding is pulled to the mean of the sensors there.
+- **SIGReg:** keeps each sensor's embeddings close to an isotropic Gaussian, so they cannot collapse (no EMA teacher, no negatives).
+- **Hidden spots:** blocks of the thermal grid are hidden. One sensor is picked as context, and its tokens over those spots are masked in the DINOv3 pass (no leak). A predictor gets that sensor's visible tokens at their thermal positions and predicts the shared embedding at the hidden spots. The target is stop-gradient (`hid_detach`); without it, the hidden loss collapsed the space in tests.
+
+### Outputs
+| Path | What |
+|---|---|
+| `results_ms2/*.json` | hit@1 and median rank for all 6 sensor directions, per condition (day / night / rain) |
+| `results_ms2/table.md` | All runs in one table |
+| `results_ms2/figs/*.png` | Shared PCA over the three sensors: image + feature colors per sensor |
+
+### Files
+| File | Role |
+|---|---|
+| `prep_ms2.py` | Frames, images (RGB, thermal, LiDAR), depth-based token matching, checks, feature cache |
+| `train3.py` | Adapter (+ predictor) training with NCE / invariance / SIGReg / hidden-spot losses; evaluation; `--zeroshot` for raw features |
+| `report3.py` | `results_ms2/table.md` |
+
+Tested end to end on a synthetic MS2-format dataset with a random small DINOv3 on CPU. Token matching gave a 0.99 / 0.98 pixel correlation for RGB / LiDAR, and flipped extrinsics were caught. With longer training on that toy data, `m3_nce`, `m3_inv` and `m3_lejepa` learned the alignment, while `m3_hid` and `m3_hid_own` stayed near chance. Those numbers say nothing about real data. It has not run on real MS2 yet, so expect small fixes on the first run.
