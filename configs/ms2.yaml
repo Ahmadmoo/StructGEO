@@ -1,0 +1,42 @@
+ms2_root: /path/to/MS2dataset
+cache_dir: /path/to/structgeo_cache_ms2
+out_dir: results_ms2
+backbone: dino_web
+layers: 1
+
+sensors: [rgb, thr, lidar]
+lidar_plane: nir
+lidar_depth: depth
+lidar_intensity: true
+lidar_fill_iters: 6
+splits:
+  train: train_list.txt
+  test_day: test_day_list.txt
+  test_night: test_night_list.txt
+  test_rain: test_rainy_list.txt
+frame_step: 10
+match_scale: true
+depth_min_px: 8
+depth_max_spread: 0.15
+occ_win: 2
+occ_tol: 0.1
+min_valid: 20
+n_fig: 4
+
+n_blocks: 2
+block_scale: [0.10, 0.20]
+block_aspect: [0.75, 1.5]
+margin_px: 16
+
+hid_target: center
+hid_detach: true
+sig_proj: 256
+sig_n: 256
+w_inv: 0.0
+w_sig: 0.0
+w_hid: 0.0
+w_nce: 0.0
+w_var: 0.0
+
+batch: 32
+epochs: 30

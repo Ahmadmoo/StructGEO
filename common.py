@@ -121,7 +121,7 @@ def to_input(img, norm, dev):
     return (x - mean) / std
 
 
-def encode(bb, x, keep=None, n_last=1, ctx=False):
+def encode(bb, x, keep=None, n_last=1, ctx=False, masks=None):
     m = bb['ctx'] if ctx else bb['full']
     outs = []
     if bb['kind'] == 'ijepa':
@@ -140,7 +140,6 @@ def encode(bb, x, keep=None, n_last=1, ctx=False):
                 outs.append(m.norm(t))
         return torch.stack(outs).mean(0), (h, w)
     B, h, w = x.shape[0], x.shape[2] // bb['patch'], x.shape[3] // bb['patch']
-    masks = None
     if keep is not None:
         masks = torch.ones(B, h * w, dtype=torch.bool, device=x.device)
         masks[:, keep] = False
@@ -154,9 +153,9 @@ def encode(bb, x, keep=None, n_last=1, ctx=False):
 
 
 class Adapter(nn.Module):
-    def __init__(s, D, cfg):
+    def __init__(s, D, cfg, n=2):
         super().__init__()
-        s.ln = nn.ModuleList([nn.LayerNorm(D), nn.LayerNorm(D)])
+        s.ln = nn.ModuleList([nn.LayerNorm(D) for _ in range(n)])
         s.mlp = nn.Sequential(nn.Linear(D, cfg['adapter_hidden']), nn.GELU(), nn.Linear(cfg['adapter_hidden'], cfg['dim']))
 
     def forward(s, x, k):
@@ -166,8 +165,8 @@ class Adapter(nn.Module):
 def posenc(uv, dim, patch):
     d = dim // 4
     w = 1.0 / 10000 ** (torch.arange(d, device=uv.device, dtype=torch.float32) / d)
-    u, v = uv[:, :1] / patch * w, uv[:, 1:] / patch * w
-    return torch.cat([u.sin(), u.cos(), v.sin(), v.cos()], 1)
+    u, v = uv[..., :1] / patch * w, uv[..., 1:] / patch * w
+    return torch.cat([u.sin(), u.cos(), v.sin(), v.cos()], -1)
 
 
 class Predictor(nn.Module):

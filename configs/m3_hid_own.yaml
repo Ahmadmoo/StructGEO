@@ -1,0 +1,4 @@
+name: m3_hid_own
+w_hid: 1.0
+w_sig: 0.002
+hid_target: own
